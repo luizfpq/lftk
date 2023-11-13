@@ -30,7 +30,7 @@ commands = [
      "Add:HandleLidSwitch=ignore -> logind.conf"),
     ("sudo touch /etc/systemd/system/disable-lid-suspend.service",
      "Creating: disable-lid-suspend.service"),
-    ("echo {} | sudo tee -a /etc/systemd/logind.conf",
+    ("echo {} | sudo tee -a /etc/systemd/system/disable-lid-suspend.service",
      "Add: content -> disable-lid-suspend.service".format(content)),
     ("sudo systemctl restart systemd-logind", "Restarting systemd-logind"),
     ("sudo systemctl daemon-reload", "Reloading systemd services"),
