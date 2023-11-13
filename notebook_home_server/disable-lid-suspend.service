@@ -1,0 +1,10 @@
+[Unit]
+Description=Disable Lid Suspend
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'echo "HandleLidSwitch=ignore" >> /etc/systemd/logind.conf'
+ExecStart=/bin/systemctl restart systemd-logind
+
+[Install]
+WantedBy=multi-user.target

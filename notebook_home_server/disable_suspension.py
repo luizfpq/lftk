@@ -10,30 +10,14 @@ def run_command_with_confirmation(command, confirmation_message):
         print(f"Error: {confirmation_message}")
         print(e)
 
-
-# Content for disable-lid-suspend.service
-content = '''[Unit]
-Description=Disable Lid Suspend
-
-[Service]
-Type=oneshot
-ExecStart=/bin/bash -c 'echo "HandleLidSwitch=ignore" >> /etc/systemd/logind.conf'
-ExecStart=/bin/systemctl restart systemd-logind
-
-[Install]
-WantedBy=multi-user.target
-'''
-
 # Command list
 commands = [
     ("sudo cp /etc/systemd/logind.conf /etc/systemd/logind.conf.old",
      "Backing: logind.conf"),
     ("echo 'HandleLidSwitch=ignore' | sudo tee -a /etc/systemd/logind.conf",
      "Add:HandleLidSwitch=ignore -> logind.conf"),
-    ("sudo touch /etc/systemd/system/disable-lid-suspend.service",
-     "Creating: disable-lid-suspend.service"),
-    ("sudo echo {} > /etc/systemd/system/disable-lid-suspend.service".format(content),
-     "Adding contents -> disable-lid-suspend.service".format(content)),
+    ("sudo cp disable-lid-suspend.service /etc/systemd/system/disable-lid-suspend.service",
+     "Add: Service file"),
     ("sudo systemctl restart systemd-logind", "Restarting systemd-logind"),
     ("sudo systemctl daemon-reload", "Reloading systemd services"),
     ("sudo systemctl enable disable-lid-suspend.service", "Enabling disable-lig-suspend.service"),
