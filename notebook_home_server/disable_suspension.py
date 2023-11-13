@@ -26,12 +26,14 @@ WantedBy=multi-user.target
 
 # Command list
 commands = [
+    ("sudo cp /etc/systemd/logind.conf /etc/systemd/logind.conf.old",
+     "Backing: logind.conf"),
     ("echo 'HandleLidSwitch=ignore' | sudo tee -a /etc/systemd/logind.conf",
      "Add:HandleLidSwitch=ignore -> logind.conf"),
     ("sudo touch /etc/systemd/system/disable-lid-suspend.service",
      "Creating: disable-lid-suspend.service"),
-    ("echo {} | sudo tee -a /etc/systemd/system/disable-lid-suspend.service".format(content),
-     "Add: {} -> disable-lid-suspend.service".format(content)),
+    ("sudo echo {} > /etc/systemd/system/disable-lid-suspend.service".format(content),
+     "Adding contents -> disable-lid-suspend.service".format(content)),
     ("sudo systemctl restart systemd-logind", "Restarting systemd-logind"),
     ("sudo systemctl daemon-reload", "Reloading systemd services"),
     ("sudo systemctl enable disable-lid-suspend.service", "Enabling disable-lig-suspend.service"),
