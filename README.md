@@ -33,3 +33,8 @@ Tenha cuidado ao executar scripts do repositório, especialmente aqueles que alt
 ---
 
 Este repositório é um trabalho em andamento e está aberto a sugestões, melhorias e contribuições. Sinta-se à vontade para explorar, contribuir e utilizar esses scripts para aprimorar o seu sistema operacional.
+
+```
+Os códigos feitos em python tem apenas a motivação de uso da linguagem para treino,
+sem a necessidade de submissão nesta linguagem por definição. 
+```
