@@ -10,6 +10,7 @@ def run_command_with_confirmation(command, confirmation_message):
         print(f"Error: {confirmation_message}")
         print(e)
 
+
 # Command list
 commands = [
     ("sudo cp /etc/systemd/logind.conf /etc/systemd/logind.conf.old",
