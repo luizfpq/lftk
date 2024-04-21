@@ -1,14 +1,16 @@
 import csv
 import mysql.connector
+import random
+import string
 
 # Função para criar as bases de dados e conceder permissões
-def criar_bases_dados(nome):
+def criar_bases_dados(nome, senha):
     # Conexão com o MySQL
     conexao = mysql.connector.connect(
-        host="seu_host",
-        user="seu_usuario",
-        password="sua_senha",
-        database="seu_banco_de_dados"
+        host="",
+        user="",
+        password="",
+        database=""
     )
     cursor = conexao.cursor()
 
@@ -16,16 +18,30 @@ def criar_bases_dados(nome):
     nome_default = f"{nome}_default"
     nome_backup = f"{nome}_backup"
 
-    # Criar bases de dados
-    cursor.execute(f"CREATE DATABASE {nome_default}")
-    cursor.execute(f"CREATE DATABASE {nome_backup}")
-
-    # Conceder permissões
-    cursor.execute(f"GRANT ALL PRIVILEGES ON {nome_default}.* TO '{nome}'@'%'")
-    cursor.execute(f"GRANT SELECT, BACKUP ON {nome_backup}.* TO '{nome}'@'%'")
+    # Tentar criar usuário com a senha gerada
+    try:
+        cursor.execute(f"""CREATE USER '{nome}'@'%' IDENTIFIED BY '{senha.replace("'", "''")}'""")
+        # Criar bases de dados
+        cursor.execute(f"CREATE DATABASE {nome_default}")
+        cursor.execute(f"CREATE DATABASE {nome_backup}")
+        # Conceder permissões
+        cursor.execute(f"GRANT ALL PRIVILEGES ON {nome_default}.* TO '{nome}'@'%'")
+        cursor.execute(f"GRANT SELECT ON {nome_backup}.* TO '{nome}'@'%'")
+    except mysql.connector.Error as err:
+        print(f"Erro ao criar usuário '{nome}': {err}")
+        return
 
     # Fechar conexão
     conexao.close()
+
+# Função para gerar senha automaticamente
+# Função para gerar senha automaticamente
+def gerar_senha():
+    caracteres = string.ascii_lowercase + string.digits
+    senha = ''.join(random.choice(caracteres) for _ in range(12)) + random.choice(string.ascii_uppercase) + '@'
+    senha = ''.join(random.sample(senha, len(senha)))
+    return senha
+
 
 # Ler o arquivo CSV
 def ler_csv(nome_arquivo):
@@ -33,7 +49,9 @@ def ler_csv(nome_arquivo):
         leitor = csv.reader(arquivo)
         for linha in leitor:
             nome = linha[0].strip()  # assumindo que o nome está na primeira coluna
-            criar_bases_dados(nome)
+            senha = gerar_senha()
+            criar_bases_dados(nome, senha)
+            print(f"Usuário '{nome}' criado com senha '{senha}'.")
 
 # Executar o script
 if __name__ == "__main__":
