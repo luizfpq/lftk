@@ -31,10 +31,15 @@ def add_swap(size='1G'):
         print("Error:", e)
 
 def make_permanent():
-    """Make the swap file permanent."""
-    with open('/etc/fstab', 'a') as f:
-        f.write('/swapfile swap swap defaults 0 0\n')
-    print("Swap file added to /etc/fstab.")
+    """Make the swap file permanent by adding an entry to /etc/fstab."""
+    try:
+        # Write to fstab using sudo
+        with sudo():
+            with open('/etc/fstab', 'a') as f:
+                f.write('/swapfile swap swap defaults 0 0\n')
+        print("Swap file added to /etc/fstab.")
+    except Exception as e:
+        print("Error:", e)
 
 def main():
     check_swap()
