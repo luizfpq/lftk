@@ -159,3 +159,5 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 mysql_user_batch_generator/nomes.csv
+ufw/ips.txt
+ufw/ports.txt
