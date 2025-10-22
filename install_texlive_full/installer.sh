@@ -40,8 +40,6 @@ binary_x86_64-linux 1
 instopt_adjustpath 0
 instopt_adjustrepo 1
 instopt_letter 1
-instopt_no_x11 0
-instopt_platform x86_64-linux
 option_doc 1
 option_src 1
 EOF
