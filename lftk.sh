@@ -77,9 +77,12 @@ menu_docker() {
         2) run_sh "$SCRIPT_DIR/install_docker_alpine/install.sh" ;;
         3) run_python "$SCRIPT_DIR/install_docker_debian/setup_memory.py" ;;
         4)
-            echo "Uso: migrate.py backup [--sync user@host] [--stop]"
-            printf "Argumentos (ou ENTER para backup local): "; read args
-            run_python "$SCRIPT_DIR/backup_docker/migrate.py" backup $args
+            printf "Parar containers antes? (mais seguro para DBs) [s/N]: "; read stop
+            printf "Sincronizar para servidor remoto? (user@host ou ENTER para só local): "; read remote
+            args="backup"
+            case $stop in s|S) args="$args --stop" ;; esac
+            if [ -n "$remote" ]; then args="$args --sync $remote"; fi
+            run_python "$SCRIPT_DIR/backup_docker/migrate.py" $args
             ;;
         5) run_python "$SCRIPT_DIR/backup_docker/backup_volumes.py" ;;
         6) run_python "$SCRIPT_DIR/backup_docker/generate_restore.py" ;;
