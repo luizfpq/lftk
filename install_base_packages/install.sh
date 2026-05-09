@@ -17,6 +17,7 @@ case "$PKG" in
     apt)
         apt update
         apt install -y \
+            python3 python3-pip python3-venv \
             htop curl wget rsync tmux unzip \
             net-tools jq tree ncdu \
             bash-completion ca-certificates gnupg \
@@ -25,6 +26,7 @@ case "$PKG" in
     apk)
         apk update
         apk add \
+            python3 py3-pip \
             htop curl wget rsync tmux unzip \
             net-tools jq tree ncdu \
             bash-completion ca-certificates gnupg \
@@ -33,6 +35,7 @@ case "$PKG" in
     dnf|yum)
         $PKG install -y epel-release 2>/dev/null || true
         $PKG install -y \
+            python3 python3-pip \
             htop curl wget rsync tmux unzip \
             net-tools jq tree ncdu \
             bash-completion ca-certificates gnupg2 \

@@ -3,6 +3,11 @@
 set -eu
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
+# Reexecuta como root se necessário
+if [ "$(id -u)" -ne 0 ]; then
+    exec sudo "$0" "$@"
+fi
+
 header() {
     clear
     echo "╔══════════════════════════════════════════════════════╗"
@@ -28,8 +33,19 @@ run_python() {
     if [ ! -f "$script" ]; then
         echo "❌ $script não encontrado"; return 1
     fi
+    # Cria venv na raiz do lftk se não existir
+    VENV="$SCRIPT_DIR/.venv"
+    if [ ! -d "$VENV" ]; then
+        echo "📦 Criando venv em $VENV..."
+        python3 -m venv "$VENV"
+    fi
+    # Instala dependências se houver requirements.txt no mesmo diretório
+    req="$(dirname "$script")/requirements.txt"
+    if [ -f "$req" ]; then
+        "$VENV/bin/pip" install -q -r "$req"
+    fi
     echo "▶ $script"; echo "---"
-    python3 "$script" "$@"
+    "$VENV/bin/python3" "$script" "$@"
 }
 
 run_sh() {
@@ -52,6 +68,7 @@ menu_docker() {
     echo "  5) Backup de volumes (simples)"
     echo "  6) Gerar docker-compose de restore"
     echo "  7) Exportar/Importar containers (legado)"
+    echo "  8) Backup de bancos de dados (auto-detect)"
     echo "  0) Voltar"
     echo ""
     printf "Opção: "; read opt
@@ -70,6 +87,7 @@ menu_docker() {
             printf "Ação [exportar/importar]: "; read action
             run_sh "$SCRIPT_DIR/install_docker_debian/export_containers.sh" "$action"
             ;;
+        8) run_sh "$SCRIPT_DIR/backup_docker/backup_databases.sh" ;;
         0) return ;;
     esac
     pause
