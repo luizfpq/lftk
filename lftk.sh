@@ -140,6 +140,7 @@ menu_sistema() {
     echo "  6) Instalar drivers NVIDIA"
     echo "  7) Instalar TeX Live completo"
     echo "  8) Instalar NPM no Alpine (Nginx Proxy Manager)"
+    echo "  9) Otimizar Ubuntu Server"
     echo "  0) Voltar"
     echo ""
     printf "Opção: "; read opt
@@ -160,6 +161,7 @@ menu_sistema() {
             ;;
         7) run_sh "$SCRIPT_DIR/install_texlive/install.sh" ;;
         8) run_sh "$SCRIPT_DIR/install_npm_alpine/install.sh" ;;
+        9) run_sh "$SCRIPT_DIR/optimize_ubuntu_server/optimize.sh" ;;
         0) return ;;
     esac
     pause
