@@ -5,13 +5,18 @@ Faz backup de volumes, exporta imagens customizadas, gera compose de restore,
 e sincroniza tudo via rsync para um servidor remoto.
 
 Uso:
-  python3 docker_migrate.py backup                     # Backup local apenas
-  python3 docker_migrate.py backup --sync user@host    # Backup + rsync para remoto
-  python3 docker_migrate.py restore                    # Restaura no servidor atual
+  python3 migrate.py backup                     # Backup local apenas
+  python3 migrate.py backup --sync user@host    # Backup + rsync para remoto
+  python3 migrate.py restore                    # Restaura no servidor atual
+
+Referências:
+  - github.com/nuddelaug/container_migrator (volume sync approach)
+  - cubepath.com/docs/server-migration/docker-container-migration
 """
 
 import argparse
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -44,20 +49,102 @@ def get_client():
         sys.exit(1)
 
 
+def _get_sudo_user_info():
+    """Retorna (uid, gid, home, user) do usuário real quando rodando via sudo."""
+    sudo_user = os.environ.get("SUDO_USER")
+    if not sudo_user or os.geteuid() != 0:
+        return None
+    uid = int(os.environ.get("SUDO_UID", 1000))
+    gid = int(os.environ.get("SUDO_GID", 1000))
+    home = f"/home/{sudo_user}"
+    return {"uid": uid, "gid": gid, "home": home, "user": sudo_user}
+
+
+def _run_as_user(cmd, **kwargs):
+    """Executa comando como o usuário real (não root) para usar SSH keys corretas."""
+    info = _get_sudo_user_info()
+    if not info:
+        return subprocess.run(cmd, **kwargs)
+
+    env = os.environ.copy()
+    env["HOME"] = info["home"]
+    env["USER"] = info["user"]
+    env["LOGNAME"] = info["user"]
+    # Garante que o ssh-agent do usuário seja acessível
+    ssh_auth = f"/run/user/{info['uid']}/keyring/ssh"
+    if os.path.exists(ssh_auth):
+        env["SSH_AUTH_SOCK"] = ssh_auth
+
+    def demote():
+        os.setgid(info["gid"])
+        os.setuid(info["uid"])
+
+    return subprocess.run(cmd, preexec_fn=demote, env=env, **kwargs)
+
+
+# ─── Verificações pré-migração ───────────────────────────────────────────────
+
+def preflight_check(remote: str, port: int):
+    """Verifica conectividade SSH e espaço em disco antes de sincronizar."""
+    print("\n🔍 Verificação pré-migração...")
+
+    # Verificar espaço local do backup
+    backup_size = sum(f.stat().st_size for f in BACKUP_BASE.rglob("*") if f.is_file())
+    backup_mb = backup_size / (1024 * 1024)
+    print(f"  📊 Tamanho do backup local: {backup_mb:.1f} MB")
+
+    # Verificar conectividade SSH
+    print(f"  🔗 Testando conexão SSH com {remote}...")
+    ssh_cmd = ["ssh", "-p", str(port), "-o", "ConnectTimeout=10",
+               "-o", "BatchMode=yes", remote, "echo ok"]
+    result = _run_as_user(ssh_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        stderr = result.stderr.strip()
+        print(f"  ❌ Falha na conexão SSH: {stderr}")
+        print("     Verifique: chave SSH configurada, host acessível, porta correta")
+        return False
+
+    # Verificar espaço no destino
+    check_cmd = ["ssh", "-p", str(port), remote,
+                 "df -BM --output=avail ~ | tail -1"]
+    result = _run_as_user(check_cmd, capture_output=True, text=True)
+    if result.returncode == 0:
+        try:
+            avail_mb = int(result.stdout.strip().rstrip("M"))
+            if avail_mb < backup_mb * 1.2:
+                print(f"  ⚠️  Espaço insuficiente no destino: {avail_mb} MB disponível, "
+                      f"necessário ~{backup_mb * 1.2:.0f} MB")
+                return False
+            print(f"  💾 Espaço no destino: {avail_mb} MB (OK)")
+        except ValueError:
+            print(f"  ⚠️  Não foi possível verificar espaço no destino (continuando)")
+
+    # Verificar rsync no destino
+    check_rsync = ["ssh", "-p", str(port), remote, "command -v rsync"]
+    result = _run_as_user(check_rsync, capture_output=True, text=True)
+    if result.returncode != 0:
+        print("  ❌ rsync não encontrado no servidor destino")
+        print("     Instale com: apt install rsync / apk add rsync")
+        return False
+
+    print("  ✅ Pré-verificação OK")
+    return True
+
+
+# ─── Backup de volumes ────────────────────────────────────────────────────────
+
 def is_custom_image(image) -> bool:
     """Detecta se a imagem é customizada (build local ou sem registry público)."""
     if not image.tags:
         return True
     for tag in image.tags:
-        # Imagens oficiais: nome:tag ou library/nome:tag
-        # Imagens de registry: registry.com/nome:tag
         parts = tag.split("/")
         if len(parts) == 1:
-            return False  # ex: nginx:latest (oficial)
+            return False
         if parts[0] in ("library", "docker.io"):
             return False
         if "." in parts[0] or ":" in parts[0]:
-            return False  # ex: ghcr.io/user/img (registry público)
+            return False
     return True
 
 
@@ -131,17 +218,10 @@ def export_images(client):
 
         try:
             with open(filename, "wb") as f:
-                subprocess.run(
-                    ["docker", "save", tag],
-                    stdout=subprocess.PIPE, check=True
-                ).stdout
-                # Usar pipe com gzip para comprimir
                 save = subprocess.Popen(
                     ["docker", "save", tag], stdout=subprocess.PIPE
                 )
-                subprocess.run(
-                    ["gzip"], stdin=save.stdout, stdout=f, check=True
-                )
+                subprocess.run(["gzip"], stdin=save.stdout, stdout=f, check=True)
                 save.wait()
                 if save.returncode != 0:
                     raise subprocess.CalledProcessError(save.returncode, "docker save")
@@ -180,7 +260,6 @@ def generate_compose(client):
             "restart": "unless-stopped",
         }
 
-        # Volumes
         if mounts:
             volumes = []
             for m in mounts:
@@ -188,7 +267,6 @@ def generate_compose(client):
                 volumes.append(f"{src}:{m['Destination']}")
             service["volumes"] = volumes
 
-        # Portas
         if ports:
             service_ports = []
             for port, binds in ports.items():
@@ -198,18 +276,15 @@ def generate_compose(client):
             if service_ports:
                 service["ports"] = service_ports
 
-        # Variáveis de ambiente
         if envs:
             service["environment"] = envs
 
-        # Networks (exceto default bridge)
         non_default = [n for n in networks if n not in ("bridge", "host", "none")]
         if non_default:
             service["networks"] = non_default
 
         compose["services"][container_name] = service
 
-    # Declarar networks usadas
     all_networks = set()
     for svc in compose["services"].values():
         all_networks.update(svc.get("networks", []))
@@ -252,32 +327,32 @@ docker ps
     print(f"\n📜 Script de restore gerado: {script}")
 
 
+# ─── Sincronização remota ─────────────────────────────────────────────────────
+
 def sync_to_remote(remote: str, port: int = 22):
-    """Sincroniza backup para servidor remoto via rsync."""
+    """Sincroniza backup para servidor remoto via rsync (incremental)."""
     print(f"\n🔄 Sincronizando para {remote}...")
 
     remote_path = f"{remote}:~/docker_backups/"
+
+    # Construir comando rsync com argumentos como lista (sem shell escaping issues)
     cmd = [
         "rsync", "-avz", "--progress", "--delete",
-        "-e", f"ssh -p {port}",
+        "-e", f"ssh -p {port} -o StrictHostKeyChecking=accept-new",
         f"{BACKUP_BASE}/",
         remote_path,
     ]
 
-    # Se rodando como root via sudo, executa rsync como o usuário real
-    # para usar as chaves SSH corretas
-    sudo_user = os.environ.get("SUDO_USER")
-    if sudo_user and os.geteuid() == 0:
-        cmd = ["su", "-", sudo_user, "-c", " ".join(cmd)]
-
-    print(f"  $ {' '.join(cmd)}")
-    result = subprocess.run(cmd)
+    print(f"  $ {shlex.join(cmd)}")
+    result = _run_as_user(cmd)
     if result.returncode == 0:
         print(f"  ✅ Sincronização concluída para {remote}")
     else:
         print(f"  ❌ rsync falhou (código {result.returncode})")
         sys.exit(1)
 
+
+# ─── Comandos ─────────────────────────────────────────────────────────────────
 
 def cmd_backup(args):
     """Executa backup completo."""
@@ -286,24 +361,29 @@ def cmd_backup(args):
 
     print(f"📁 Diretório de backup: {BACKUP_BASE}")
 
+    # Pré-verificação se vai sincronizar
+    if args.sync:
+        if not preflight_check(args.sync, args.port):
+            print("\n❌ Pré-verificação falhou. Corrija os problemas acima.")
+            sys.exit(1)
+
     # Parar containers se solicitado
+    running_names = []
     if args.stop:
-        running = [c.name for c in client.containers.list()]
-        if running:
+        running_names = [c.name for c in client.containers.list()]
+        if running_names:
             print("\n⏹️  Parando containers...")
-            subprocess.run(["docker", "stop"] + running, check=False)
+            subprocess.run(["docker", "stop"] + running_names, check=False)
 
     backup_volumes(client)
     export_images(client)
     generate_compose(client)
     generate_restore_script()
 
-    # Reiniciar containers se foram parados
-    if args.stop:
-        stopped = [c.name for c in client.containers.list(all=True)]
-        if stopped:
-            print("\n▶️  Reiniciando containers...")
-            subprocess.run(["docker", "start"] + stopped, check=False)
+    # Reiniciar containers que foram parados
+    if args.stop and running_names:
+        print("\n▶️  Reiniciando containers...")
+        subprocess.run(["docker", "start"] + running_names, check=False)
 
     if args.sync:
         sync_to_remote(args.sync, args.port)
@@ -325,13 +405,11 @@ def main():
     parser = argparse.ArgumentParser(description="Docker Backup & Migration Tool")
     sub = parser.add_subparsers(dest="command")
 
-    # backup
     bp = sub.add_parser("backup", help="Backup volumes + imagens + compose")
     bp.add_argument("--sync", metavar="USER@HOST", help="Sincronizar via rsync para servidor remoto")
     bp.add_argument("--port", type=int, default=22, help="Porta SSH para rsync (default: 22)")
     bp.add_argument("--stop", action="store_true", help="Parar containers antes do backup (mais seguro para DBs)")
 
-    # restore
     sub.add_parser("restore", help="Restaurar backup no servidor atual")
 
     args = parser.parse_args()
