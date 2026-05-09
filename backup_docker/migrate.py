@@ -26,7 +26,8 @@ except ImportError:
     sys.exit(1)
 
 
-BACKUP_BASE = Path.home() / "docker_backups"
+_real_home = Path(f"/home/{os.environ['SUDO_USER']}") if "SUDO_USER" in os.environ else Path.home()
+BACKUP_BASE = _real_home / "docker_backups"
 
 
 def safe_name(name: str) -> str:
@@ -263,6 +264,12 @@ def sync_to_remote(remote: str, port: int = 22):
         remote_path,
     ]
 
+    # Se rodando como root via sudo, executa rsync como o usuário real
+    # para usar as chaves SSH corretas
+    sudo_user = os.environ.get("SUDO_USER")
+    if sudo_user and os.geteuid() == 0:
+        cmd = ["su", "-", sudo_user, "-c", " ".join(cmd)]
+
     print(f"  $ {' '.join(cmd)}")
     result = subprocess.run(cmd)
     if result.returncode == 0:
@@ -281,8 +288,10 @@ def cmd_backup(args):
 
     # Parar containers se solicitado
     if args.stop:
-        print("\n⏹️  Parando containers...")
-        subprocess.run(["docker", "stop"] + [c.name for c in client.containers.list()], check=False)
+        running = [c.name for c in client.containers.list()]
+        if running:
+            print("\n⏹️  Parando containers...")
+            subprocess.run(["docker", "stop"] + running, check=False)
 
     backup_volumes(client)
     export_images(client)
@@ -291,8 +300,10 @@ def cmd_backup(args):
 
     # Reiniciar containers se foram parados
     if args.stop:
-        print("\n▶️  Reiniciando containers...")
-        subprocess.run(["docker", "start"] + [c.name for c in client.containers.list(all=True)], check=False)
+        stopped = [c.name for c in client.containers.list(all=True)]
+        if stopped:
+            print("\n▶️  Reiniciando containers...")
+            subprocess.run(["docker", "start"] + stopped, check=False)
 
     if args.sync:
         sync_to_remote(args.sync, args.port)
