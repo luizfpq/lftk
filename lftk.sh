@@ -24,6 +24,12 @@ pause() {
 
 run_python() {
     local script="$1"; shift
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo -e "${RED}python3 não encontrado. Instale com:${NC}"
+        echo "  Alpine: apk add python3"
+        echo "  Debian: apt install python3"
+        return 1
+    fi
     if [ ! -f "$script" ]; then
         echo -e "${RED}Erro: $script não encontrado${NC}"; return 1
     fi
@@ -59,11 +65,9 @@ menu_docker() {
         2) run_bash "$SCRIPT_DIR/install_docker_alpine/install.sh" ;;
         3) run_python "$SCRIPT_DIR/install_docker_debian/setup_memory.py" ;;
         4)
-            echo -e "${CYAN}Uso: python3 migrate.py backup [--sync user@host] [--stop]${NC}"
+            echo -e "${CYAN}Uso: migrate.py backup [--sync user@host] [--stop]${NC}"
             read -rp "Argumentos (ou ENTER para backup local): " args
-            cd "$SCRIPT_DIR/backup_docker"
-            python3 migrate.py backup $args
-            cd "$SCRIPT_DIR"
+            run_python "$SCRIPT_DIR/backup_docker/migrate.py" backup $args
             ;;
         5) run_python "$SCRIPT_DIR/backup_docker/backup_volumes.py" ;;
         6) run_python "$SCRIPT_DIR/backup_docker/generate_restore.py" ;;
@@ -112,22 +116,24 @@ menu_sistema() {
     header
     echo -e "${GREEN}Sistema & Hardware${NC}"
     echo ""
-    echo "  1) GRUB savedefault (dual-boot)"
-    echo "  2) Desabilitar suspend ao fechar tampa"
-    echo "  3) Criar swap em VPS"
-    echo "  4) Montar RAID dinâmico (ldmtool)"
-    echo "  5) Instalar drivers NVIDIA"
-    echo "  6) Instalar TeX Live completo"
-    echo "  7) Instalar NPM no Alpine (Nginx Proxy Manager)"
+    echo "  1) Instalar pacotes base (multi-distro)"
+    echo "  2) Criar swap em VPS"
+    echo "  3) GRUB savedefault (dual-boot)"
+    echo "  4) Desabilitar suspend ao fechar tampa"
+    echo "  5) Montar RAID dinâmico (ldmtool)"
+    echo "  6) Instalar drivers NVIDIA"
+    echo "  7) Instalar TeX Live completo"
+    echo "  8) Instalar NPM no Alpine (Nginx Proxy Manager)"
     echo "  0) Voltar"
     echo ""
     read -rp "Opção: " opt
     case $opt in
-        1) run_python "$SCRIPT_DIR/setup_grub_savedefault/setup.py" ;;
-        2) run_python "$SCRIPT_DIR/setup_notebook_server/disable_suspend.py" ;;
-        3) run_python "$SCRIPT_DIR/setup_swap_vps/setup.py" ;;
-        4) run_python "$SCRIPT_DIR/setup_mount_softraid/mount.py" ;;
-        5)
+        1) run_bash "$SCRIPT_DIR/install_base_packages/install.sh" ;;
+        2) run_bash "$SCRIPT_DIR/setup_swap_vps/setup.sh" ;;
+        3) run_python "$SCRIPT_DIR/setup_grub_savedefault/setup.py" ;;
+        4) run_python "$SCRIPT_DIR/setup_notebook_server/disable_suspend.py" ;;
+        5) run_python "$SCRIPT_DIR/setup_mount_softraid/mount.py" ;;
+        6)
             echo "  a) NVIDIA padrão"
             echo "  b) NVIDIA Debian Testing"
             read -rp "Opção: " nv
@@ -136,8 +142,8 @@ menu_sistema() {
                 b) run_bash "$SCRIPT_DIR/install_nvidia/install_testing.sh" ;;
             esac
             ;;
-        6) run_bash "$SCRIPT_DIR/install_texlive/install.sh" ;;
-        7) run_bash "$SCRIPT_DIR/install_npm_alpine/install.sh" ;;
+        7) run_bash "$SCRIPT_DIR/install_texlive/install.sh" ;;
+        8) run_bash "$SCRIPT_DIR/install_npm_alpine/install.sh" ;;
         0) return ;;
     esac
     pause
@@ -174,7 +180,6 @@ menu_utils() {
     pause
 }
 
-# Main loop
 while true; do
     header
     echo "  1) 🐳 Docker"
