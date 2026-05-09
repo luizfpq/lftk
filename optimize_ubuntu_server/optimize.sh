@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 # optimize.sh - Otimização para Ubuntu Server (VPS/dedicado)
 set -eu
 
@@ -14,26 +14,15 @@ echo "╚═══════════════════════�
 echo ""
 echo "⏹️  Desabilitando serviços desnecessários..."
 
-DISABLE_SERVICES=(
-    snapd snapd.socket snapd.seeded
-    ModemManager
-    networkd-dispatcher
-    apport
-    motd-news.timer
-    fwupd
-    udisks2
-    accounts-daemon
-    multipathd
-)
-
-for svc in "${DISABLE_SERVICES[@]}"; do
-    if systemctl is-enabled "$svc" &>/dev/null; then
+for svc in snapd snapd.socket snapd.seeded ModemManager networkd-dispatcher \
+           apport motd-news.timer fwupd udisks2 accounts-daemon multipathd; do
+    if systemctl is-enabled "$svc" >/dev/null 2>&1; then
         systemctl disable --now "$svc" 2>/dev/null && echo "  ✅ $svc desabilitado"
     fi
 done
 
 # Remover snap se não estiver em uso
-if command -v snap &>/dev/null && [ "$(snap list 2>/dev/null | wc -l)" -le 1 ]; then
+if command -v snap >/dev/null 2>&1 && [ "$(snap list 2>/dev/null | wc -l)" -le 1 ]; then
     echo "  🗑️  Removendo snapd (sem snaps instalados)..."
     apt purge -y snapd 2>/dev/null
     rm -rf /snap /var/snap /var/lib/snapd
@@ -90,7 +79,7 @@ journalctl --vacuum-size=100M --vacuum-time=7d >/dev/null 2>&1
 echo "  ✅ Logs limitados a 100M / 7 dias"
 
 # ─── 4. Netdata - reduzir overhead se presente ───────────────────────────────
-if systemctl is-active netdata &>/dev/null; then
+if systemctl is-active netdata >/dev/null 2>&1; then
     echo ""
     echo "📊 Otimizando netdata (reduzindo coleta)..."
 
@@ -148,7 +137,7 @@ echo "  • Serviços desnecessários desabilitados"
 echo "  • Kernel tunado para rede e memória"
 echo "  • Journald limitado (100M/7d)"
 echo "  • Cache e logs antigos limpos"
-if systemctl is-active netdata &>/dev/null; then
+if systemctl is-active netdata >/dev/null 2>&1; then
     echo "  • Netdata: apps.plugin desabilitado (era o maior consumidor)"
 fi
 echo ""
