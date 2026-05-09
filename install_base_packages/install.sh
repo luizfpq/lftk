@@ -21,7 +21,7 @@ case "$PKG" in
             htop curl wget rsync tmux unzip \
             net-tools jq tree ncdu \
             bash-completion ca-certificates gnupg \
-            mlocate logrotate openssh-server
+            plocate logrotate openssh-server
         ;;
     apk)
         apk update
