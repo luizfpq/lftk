@@ -3,7 +3,8 @@
 # Suporta: PostgreSQL, MySQL, MariaDB, MongoDB, SQLite
 set -eu
 
-BACKUP_DIR="${1:-$HOME/docker_db_backups}"
+REAL_HOME=$(eval echo "~${SUDO_USER:-$(whoami)}")
+BACKUP_DIR="${1:-$REAL_HOME/docker_db_backups}"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 mkdir -p "$BACKUP_DIR"
 
@@ -89,9 +90,23 @@ detect_and_dump() {
 }
 
 count=0
-for container in $(docker ps --format '{{.Names}}'); do
+for container in $(docker ps -a --format '{{.Names}}'); do
+    # Verifica se está rodando
+    state=$(docker inspect --format '{{.State.Running}}' "$container")
+    started_now=false
+    if [ "$state" = "false" ]; then
+        echo "⏸️  $container está parado, iniciando temporariamente..."
+        docker start "$container" >/dev/null 2>&1 || continue
+        sleep 2
+        started_now=true
+    fi
     if detect_and_dump "$container" 2>/dev/null; then
         count=$((count + 1))
+    fi
+    # Para novamente se foi ligado só para o backup
+    if [ "$started_now" = "true" ]; then
+        echo "  ⏹️  Parando $container novamente"
+        docker stop "$container" >/dev/null 2>&1
     fi
 done
 
